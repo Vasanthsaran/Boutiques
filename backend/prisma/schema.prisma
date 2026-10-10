@@ -1,0 +1,481 @@
+// SVSS Boutique data model.
+// Showcase + enquiries + appointments + content management only.
+// There are intentionally NO order, cart, checkout or payment models.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CUSTOMER
+  ADMIN
+}
+
+enum PublishStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum MediaKind {
+  IMAGE
+  VIDEO
+}
+
+enum WorkMediaRole {
+  GALLERY
+  BEFORE
+  AFTER
+  VIDEO
+}
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+  COMPLETED
+  CANCELLED
+}
+
+enum ChangeRequestStatus {
+  PENDING
+  APPROVED
+  DECLINED
+}
+
+enum EnquiryStatus {
+  NEW
+  UNDER_REVIEW
+  RESPONDED
+  CLOSED
+}
+
+enum MessageAuthor {
+  CUSTOMER
+  ADMIN
+}
+
+enum TokenPurpose {
+  PASSWORD_RESET
+  EMAIL_VERIFY
+}
+
+// ───────────────────────── Users & auth ─────────────────────────
+
+model User {
+  id              String    @id @default(cuid())
+  name            String
+  email           String    @unique // always stored lower-case
+  phone           String?
+  passwordHash    String
+  role            Role      @default(CUSTOMER)
+  isActive        Boolean   @default(true)
+  emailVerifiedAt DateTime?
+  lastLoginAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  sessions       Session[]
+  tokens         AuthToken[]
+  favorites      Favorite[]
+  appointments   Appointment[]
+  enquiries      Enquiry[]
+  notifications  Notification[]
+  activityLogs   AdminActivityLog[]
+  enquiryNotes   EnquiryNote[]
+  uploadedAssets MediaAsset[]
+
+  @@index([role, createdAt])
+}
+
+model Session {
+  id         String   @id // sha256 of the opaque cookie token
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  userAgent  String?
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model AuthToken {
+  id        String       @id @default(cuid())
+  userId    String
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String       @unique
+  purpose   TokenPurpose
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime     @default(now())
+
+  @@index([userId, purpose])
+}
+
+// ───────────────────────── Media ─────────────────────────
+
+model MediaAsset {
+  id           String    @id @default(cuid())
+  key          String    @unique // storage object key
+  thumbKey     String?   @unique // smaller rendition for grids (images only)
+  kind         MediaKind
+  mime         String
+  size         Int
+  width        Int?
+  height       Int?
+  alt          String?
+  isPublic     Boolean   @default(true) // enquiry reference images are private
+  uploadedById String?
+  uploadedBy   User?     @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  createdAt    DateTime  @default(now())
+
+  serviceCovers     Service[]           @relation("ServiceCover")
+  serviceImages     ServiceImage[]
+  collectionCovers  Collection[]        @relation("CollectionCover")
+  categoryCovers    Category[]          @relation("CategoryCover")
+  workCovers        RecentWork[]        @relation("WorkCover")
+  workMedia         RecentWorkMedia[]
+  enquiryAttachment EnquiryAttachment[]
+
+  @@index([createdAt])
+}
+
+// ───────────────────────── Catalogue / showcase ─────────────────────────
+
+model Service {
+  id           String        @id @default(cuid())
+  title        String
+  slug         String        @unique
+  summary      String?
+  description  String
+  coverId      String?
+  cover        MediaAsset?   @relation("ServiceCover", fields: [coverId], references: [id], onDelete: SetNull)
+  priceRange   String? // only ever owner-supplied
+  duration     String? // only ever owner-supplied
+  isAvailable  Boolean       @default(true)
+  availability String? // optional owner note, e.g. "Bookings open for festive season"
+  isCore       Boolean       @default(false)
+  status       PublishStatus @default(DRAFT)
+  sortOrder    Int           @default(0)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  images       ServiceImage[]
+  appointments Appointment[]
+  enquiries    Enquiry[]
+
+  @@index([status, sortOrder])
+}
+
+model ServiceImage {
+  id        String     @id @default(cuid())
+  serviceId String
+  service   Service    @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  assetId   String     @unique
+  asset     MediaAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  sortOrder Int        @default(0)
+
+  @@index([serviceId, sortOrder])
+}
+
+model Category {
+  id          String       @id @default(cuid())
+  name        String
+  slug        String       @unique
+  description String?
+  coverId     String?
+  cover       MediaAsset?  @relation("CategoryCover", fields: [coverId], references: [id], onDelete: SetNull)
+  isActive    Boolean      @default(true)
+  sortOrder   Int          @default(0)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  works       RecentWork[]
+
+  @@index([sortOrder])
+}
+
+model Collection {
+  id          String           @id @default(cuid())
+  title       String
+  slug        String           @unique
+  description String?
+  coverId     String?
+  cover       MediaAsset?      @relation("CollectionCover", fields: [coverId], references: [id], onDelete: SetNull)
+  featured    Boolean          @default(false)
+  status      PublishStatus    @default(DRAFT)
+  sortOrder   Int              @default(0)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  works       CollectionWork[]
+
+  @@index([status, sortOrder])
+}
+
+model CollectionWork {
+  collectionId String
+  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  workId       String
+  work         RecentWork @relation(fields: [workId], references: [id], onDelete: Cascade)
+  sortOrder    Int        @default(0)
+
+  @@id([collectionId, workId])
+  @@index([workId])
+}
+
+model RecentWork {
+  id             String        @id @default(cuid())
+  title          String
+  slug           String        @unique
+  description    String
+  categoryId     String
+  category       Category      @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  coverId        String?
+  cover          MediaAsset?   @relation("WorkCover", fields: [coverId], references: [id], onDelete: SetNull)
+  completedAt    DateTime?     @db.Date
+  featured       Boolean       @default(false)
+  featuredOrder  Int           @default(0)
+  status         PublishStatus @default(DRAFT)
+  publishedAt    DateTime?
+  priceRange     String?
+  enquiryEnabled Boolean       @default(true)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  media        RecentWorkMedia[]
+  collections  CollectionWork[]
+  favorites    Favorite[]
+  enquiries    Enquiry[]
+  appointments Appointment[]
+
+  @@index([status, publishedAt])
+  @@index([categoryId, status])
+  @@index([featured, featuredOrder])
+}
+
+model RecentWorkMedia {
+  id        String        @id @default(cuid())
+  workId    String
+  work      RecentWork    @relation(fields: [workId], references: [id], onDelete: Cascade)
+  assetId   String        @unique
+  asset     MediaAsset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  role      WorkMediaRole @default(GALLERY)
+  caption   String?
+  sortOrder Int           @default(0)
+
+  @@index([workId, sortOrder])
+}
+
+model Favorite {
+  userId    String
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workId    String
+  work      RecentWork @relation(fields: [workId], references: [id], onDelete: Cascade)
+  createdAt DateTime   @default(now())
+
+  @@id([userId, workId])
+  @@index([workId])
+}
+
+model Testimonial {
+  id        String        @id @default(cuid())
+  name      String
+  context   String? // e.g. "Bridal blouse, 2026" — owner-supplied
+  text      String
+  status    PublishStatus @default(DRAFT)
+  sortOrder Int           @default(0)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+}
+
+// ───────────────────────── Appointments ─────────────────────────
+
+// Weekly working hours (one or more windows per weekday). Times are "HH:mm"
+// in the boutique's configured timezone (StoreSettings "booking").
+model AppointmentAvailability {
+  id        String   @id @default(cuid())
+  dayOfWeek Int // 1 = Monday … 7 = Sunday (ISO, matches Luxon)
+  startTime String
+  endTime   String
+  createdAt DateTime @default(now())
+
+  @@index([dayOfWeek])
+}
+
+model BlockedDate {
+  id        String   @id @default(cuid())
+  date      DateTime @unique @db.Date
+  reason    String?
+  createdAt DateTime @default(now())
+}
+
+model Appointment {
+  id            String            @id @default(cuid())
+  reference     String            @unique
+  userId        String?
+  user          User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+  name          String
+  email         String?
+  phone         String?
+  serviceId     String?
+  service       Service?          @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  serviceTitle  String // snapshot so history survives service edits
+  relatedWorkId String?
+  relatedWork   RecentWork?       @relation(fields: [relatedWorkId], references: [id], onDelete: SetNull)
+  startAt       DateTime
+  endAt         DateTime
+  status        AppointmentStatus @default(PENDING)
+  message       String?
+  designRef     String?
+  adminNotes    String? // internal; never returned by customer API
+  statusNote    String? // customer-visible note from the boutique
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  changeRequests AppointmentChangeRequest[]
+  logs           AppointmentLog[]
+
+  @@index([startAt])
+  @@index([userId, startAt])
+  @@index([status, startAt])
+  // A partial unique index (see migration) prevents two active bookings
+  // (PENDING/CONFIRMED) from sharing the same start time.
+}
+
+model AppointmentChangeRequest {
+  id               String              @id @default(cuid())
+  appointmentId    String
+  appointment      Appointment         @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  requestedStartAt DateTime?
+  message          String?
+  status           ChangeRequestStatus @default(PENDING)
+  createdAt        DateTime            @default(now())
+  resolvedAt       DateTime?
+
+  @@index([appointmentId, status])
+}
+
+model AppointmentLog {
+  id            String      @id @default(cuid())
+  appointmentId String
+  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  actorId       String?
+  actorRole     String // ADMIN | CUSTOMER | GUEST | SYSTEM
+  action        String
+  fromStatus    String?
+  toStatus      String?
+  details       Json?
+  createdAt     DateTime    @default(now())
+
+  @@index([appointmentId, createdAt])
+}
+
+// ───────────────────────── Enquiries ─────────────────────────
+
+model Enquiry {
+  id               String        @id @default(cuid())
+  reference        String        @unique
+  userId           String?
+  user             User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  name             String
+  email            String?
+  phone            String?
+  serviceId        String?
+  service          Service?      @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  serviceLabel     String?
+  relatedWorkId    String?
+  relatedWork      RecentWork?   @relation(fields: [relatedWorkId], references: [id], onDelete: SetNull)
+  subject          String
+  status           EnquiryStatus @default(NEW)
+  awaitingReply    Boolean       @default(true) // true when the last visible message is from the customer
+  archivedAt       DateTime?
+  lastActivityAt   DateTime      @default(now())
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  messages    EnquiryMessage[]
+  notes       EnquiryNote[]
+  attachments EnquiryAttachment[]
+
+  @@index([userId, createdAt])
+  @@index([status, lastActivityAt])
+}
+
+model EnquiryMessage {
+  id         String        @id @default(cuid())
+  enquiryId  String
+  enquiry    Enquiry       @relation(fields: [enquiryId], references: [id], onDelete: Cascade)
+  authorType MessageAuthor
+  authorId   String?
+  body       String
+  createdAt  DateTime      @default(now())
+
+  @@index([enquiryId, createdAt])
+}
+
+// Private admin-only notes. Kept in a separate table so the customer API
+// cannot accidentally select them.
+model EnquiryNote {
+  id        String   @id @default(cuid())
+  enquiryId String
+  enquiry   Enquiry  @relation(fields: [enquiryId], references: [id], onDelete: Cascade)
+  authorId  String?
+  author    User?    @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  body      String
+  createdAt DateTime @default(now())
+
+  @@index([enquiryId, createdAt])
+}
+
+model EnquiryAttachment {
+  id        String     @id @default(cuid())
+  enquiryId String
+  enquiry   Enquiry    @relation(fields: [enquiryId], references: [id], onDelete: Cascade)
+  assetId   String     @unique
+  asset     MediaAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@index([enquiryId])
+}
+
+// ───────────────────────── Notifications, settings, audit ─────────────────────────
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  title     String
+  body      String?
+  link      String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, readAt, createdAt])
+}
+
+model StoreSettings {
+  key         String   @id
+  value       Json
+  updatedAt   DateTime @updatedAt
+  updatedById String?
+}
+
+model AdminActivityLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  actor      User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  action     String
+  entityType String
+  entityId   String?
+  summary    String
+  meta       Json?
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([entityType, entityId])
+}

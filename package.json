@@ -1,0 +1,27 @@
+{
+  "name": "svss-boutique",
+  "private": true,
+  "version": "1.0.0",
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace backend & npm run dev --workspace frontend",
+    "dev:backend": "npm run dev --workspace backend",
+    "dev:frontend": "npm run dev --workspace frontend",
+    "build": "npm run build --workspace backend && npm run build --workspace frontend",
+    "start": "npm run start --workspace backend",
+    "db:migrate": "npm run db:migrate --workspace backend",
+    "db:deploy": "npm run db:deploy --workspace backend",
+    "db:seed": "npm run db:seed --workspace backend",
+    "create-admin": "npm run create-admin --workspace backend",
+    "test": "npm run test --workspace backend",
+    "test:e2e": "npm run test:e2e --workspace frontend",
+    "db:dev:init": "bash scripts/dev-db.sh init",
+    "db:dev:start": "bash scripts/dev-db.sh start",
+    "db:dev:stop": "bash scripts/dev-db.sh stop",
+    "typecheck": "npm run typecheck --workspace backend && npm run typecheck --workspace frontend",
+    "media:cleanup": "npm run media:cleanup --workspace backend"
+  }
+}

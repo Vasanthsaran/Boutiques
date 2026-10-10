@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+.dev/
+backend/storage/
+backend/test-storage/
+frontend/test-results/
+frontend/playwright-report/
+*.log
+.DS_Store
+backend/test-storage-e2e/
