@@ -1,0 +1,43 @@
+# Render Blueprint — builds the site from the Dockerfile in this repo and
+# creates a Postgres database for it.
+# (This is NOT the same as docker-compose.yml — Render only understands this format.)
+databases:
+  - name: svss-db
+    databaseName: svss
+    user: svss
+    plan: free
+
+services:
+  - type: web
+    name: svss-boutique
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: TRUST_PROXY            # Render sits behind a proxy
+        value: "1"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: svss-db
+          property: connectionString
+      - key: SESSION_SECRET
+        generateValue: true
+      # Render asks you for these when you create the Blueprint:
+      - key: APP_ORIGIN             # e.g. https://svss-boutique.onrender.com (no trailing slash)
+        sync: false
+      - key: STORAGE_DRIVER
+        value: s3                   # required in production
+      - key: S3_BUCKET
+        sync: false
+      - key: S3_REGION
+        sync: false
+      - key: S3_ENDPOINT
+        sync: false
+      - key: S3_ACCESS_KEY_ID
+        sync: false
+      - key: S3_SECRET_ACCESS_KEY
+        sync: false
