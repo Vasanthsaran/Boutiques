@@ -1,0 +1,34 @@
+# Never send these to Docker: they're rebuilt inside the image,
+# or they're local-only / secret.
+node_modules
+**/node_modules
+**/dist
+*.tsbuildinfo
+
+# Secrets and local config — never bake into an image
+.env
+.env.*
+!.env.example
+
+# Local dev / test leftovers
+.dev
+.git
+.gitignore
+backend/storage
+backend/test-storage
+backend/test-storage-e2e
+frontend/test-results
+frontend/playwright-report
+frontend/e2e
+*.log
+.DS_Store
+
+# Not needed at runtime
+assets
+brand
+docs
+README.md
+run.sh
+Dockerfile
+.dockerignore
+docker-compose.yml

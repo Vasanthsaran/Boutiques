@@ -1,0 +1,41 @@
+# OPTIONAL — for trying the image on your own computer.
+#   docker compose up --build
+# then open http://localhost:4000
+#
+# It starts a throw-away Postgres next to the website. This is a local TRIAL
+# setup (development mode + local disk for photos). For the real live site,
+# use your own managed Postgres + S3 bucket and the variables in .env.example.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: svss
+      POSTGRES_PASSWORD: svss
+      POSTGRES_DB: svss
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U svss -d svss"]
+      interval: 3s
+      retries: 20
+
+  web:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "4000:4000"
+    environment:
+      NODE_ENV: development            # trial only; production needs S3 storage
+      APP_ORIGIN: http://localhost:4000
+      DATABASE_URL: postgresql://svss:svss@db:5432/svss?schema=public
+      SESSION_SECRET: local-trial-secret-change-me-0123456789abcdef
+      STORAGE_DRIVER: local
+      LOCAL_STORAGE_DIR: /app/backend/storage
+    volumes:
+      - mediadata:/app/backend/storage
+
+volumes:
+  dbdata:
+  mediadata:
